@@ -80,35 +80,6 @@ xdg\-open(1), Project Page \fIhttps://gitlab\.com/4U6U57/wsl\-open\fR
 .\" END IMPORT wsl-open.1
 "
 
-# Path conversion functions
-WinPathToLinux() {
-  Path=$*
-  # Sanitize, remove \r and \n
-  Path=$(tr -d '\r\n' <<< "$Path")
-  # C:\\folder\path -> C:\folder\path (only if there is \\)
-  Path=${Path//\\\\/\\}
-  # C:\folder\path -> C:/folder/path
-  Path=${Path//\\/\/}
-  # C:/folder/path -> c/folder/path
-  # shellcheck disable=SC2018,SC2019
-  Path=$(tr 'A-Z' 'a-z' <<< "${Path:0:1}")${Path:2}
-  # c/folder/path -> /mnt/c/folder/path
-  Path=$WslDisks/$Path
-  echo "$Path"
-}
-LinuxPathToWin() {
-  Path=$*
-  # If path not under $Disks, can't convert
-  [[ $Path != $WslDisks/* ]] && Error "Error converting Linux path to Windows"
-  # /mnt/c/folder/path -> c/folder/path
-  Path=${Path:$((${#WslDisks} + 1))}
-  # c/folder/path -> C://folder/path
-  Path=$(tr '[:lower:]' '[:upper:]' <<< "${Path:0:1}"):/${Path:1}
-  # C://folder/path -> C:\\folder\path
-  Path=${Path//\//\\}
-  echo "$Path"
-}
-
 # Printer for dry run function
 DryRunner() {
   echo "$Exe: RUN: $*"
@@ -189,32 +160,12 @@ File=$1
 if [[ -n $File ]]; then
   if [[ -e $File ]]; then
     # File or directory
-    FilePath="$(readlink -f "$File")"
+    FilePath=$(readlink -f "$File")
+	#FilePath=${FilePath//\ /\\\ }
+	#echo $FilePath
 
-    # shellcheck disable=SC2053
-    if [[ $FilePath != $WslDisks/* ]]; then
-      # File or directory is not on a Windows accessible disk
-      # If it is a directory, then we can't do anything, quit
-      [[ ! -f $FilePath ]] && Error "Directory not in Windows partition: $FilePath"
-      # If it's a file, we copy it to the user's temp folder before opening
-      Warning "File not in Windows partition: $FilePath"
-      # If we do not have a temp folder assigned, find one using Windows
-      if [[ -z $WslTempDir ]]; then
-        TempFolder=$(cmd.exe /C echo %TEMP%)
-        WslTempDir=$(WinPathToLinux "$TempFolder")
-      fi
-      ExeTempDir="$WslTempDir/$Exe"
-      [[ ! -e $ExeTempDir ]] && Warning "Creating temp dir for $Exe to use: $ExeTempDir" && mkdir --parents "$ExeTempDir"
-      FilePath="$ExeTempDir/$(basename "$FilePath")"
-      if ! $DryRun; then
-        echo -n "Copying "
-        cp -v "$File" "$FilePath" || Error "Could not copy file, check that it's not open on Windows"
-      else
-        DryRunner "cp \"$File\" \"$FilePath\""
-      fi
-    fi
-
-    FileWin=$(LinuxPathToWin "$FilePath")
+	#echo wslpath -w "$FilePath"
+      FileWin=$(wslpath -w "$FilePath")
   elif [[ $File == *://* ]]; then
     # If "file" input is a link, just pass it directly
     FileWin=$File
